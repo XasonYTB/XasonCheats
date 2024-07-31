@@ -1,0 +1,296 @@
+-- LocalScript for FPS Admin with Enhanced ESP, Auto-Aim, WalkSpeed Slider, and Auto Shoot
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Variables
+local autoAimEnabled = false
+local espEnabled = true
+local autoShootEnabled = false
+local maxESPDistance = 200  -- Distance at which ESP becomes invisible
+local defaultWalkSpeed = 16  -- Default walk speed
+local shootButton = nil
+
+-- Function to create UI
+local function createUI()
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "AdminUI"
+	screenGui.ResetOnSpawn = false  -- Ensures the GUI persists through respawns
+	screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(0, 300, 0, 230)
+	frame.Position = UDim2.new(0, 10, 0, 10)
+	frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	frame.Parent = screenGui
+
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, 0, 0, 30)
+	title.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	title.Text = "Xason's Rival's hub"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.Parent = frame
+
+	local autoAimButton = Instance.new("TextButton")
+	autoAimButton.Size = UDim2.new(1, 0, 0, 30)
+	autoAimButton.Position = UDim2.new(0, 0, 0, 40)
+	autoAimButton.Text = "Toggle Auto Aim"
+	autoAimButton.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+	autoAimButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	autoAimButton.Parent = frame
+
+	local espButton = Instance.new("TextButton")
+	espButton.Size = UDim2.new(1, 0, 0, 30)
+	espButton.Position = UDim2.new(0, 0, 0, 80)
+	espButton.Text = "Toggle ESP"
+	espButton.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+	espButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	espButton.Parent = frame
+
+	-- WalkSpeed Slider
+	local walkSpeedLabel = Instance.new("TextLabel")
+	walkSpeedLabel.Size = UDim2.new(1, 0, 0, 30)
+	walkSpeedLabel.Position = UDim2.new(0, 0, 0, 120)
+	walkSpeedLabel.Text = "WalkSpeed: " .. defaultWalkSpeed
+	walkSpeedLabel.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	walkSpeedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	walkSpeedLabel.Parent = frame
+
+	local sliderFrame = Instance.new("Frame")
+	sliderFrame.Size = UDim2.new(1, 0, 0, 20)
+	sliderFrame.Position = UDim2.new(0, 0, 0, 150)
+	sliderFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	sliderFrame.Parent = frame
+
+	local slider = Instance.new("Frame")
+	slider.Size = UDim2.new(0, 100, 1, 0)
+	slider.Position = UDim2.new(0, 0, 0, 0)
+	slider.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+	slider.Parent = sliderFrame
+
+	local knob = Instance.new("Frame")
+	knob.Size = UDim2.new(0, 20, 1, 0)
+	knob.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+	knob.Position = UDim2.new(0, 0, 0, 0)
+	knob.Parent = slider
+
+	local function updateWalkSpeed(value)
+		LocalPlayer.Character.Humanoid.WalkSpeed = value
+		walkSpeedLabel.Text = "WalkSpeed: anti-cheat goes hard"
+	end
+
+	local dragging = false
+
+	knob.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+		end
+	end)
+
+	knob.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = false
+		end
+	end)
+
+	RunService.RenderStepped:Connect(function()
+		if dragging then
+			local mousePosition = UserInputService:GetMouseLocation()
+			local sliderSize = sliderFrame.AbsoluteSize.X
+			local sliderPosition = sliderFrame.AbsolutePosition.X
+			local newPosition = math.clamp(mousePosition.X - sliderPosition, 0, sliderSize)
+			knob.Position = UDim2.new(0, newPosition, 0, 0)
+			local walkSpeed = math.floor((newPosition / sliderSize) * 100)  -- Adjust the range as needed
+			updateWalkSpeed(walkSpeed)
+		end
+	end)
+
+	-- Auto Shoot Button
+	local autoShootButton = Instance.new("TextButton")
+	autoShootButton.Size = UDim2.new(1, 0, 0, 30)
+	autoShootButton.Position = UDim2.new(0, 0, 0, 190)
+	autoShootButton.Text = "Toggle Auto Shoot"
+	autoShootButton.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+	autoShootButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	autoShootButton.Parent = frame
+
+	autoAimButton.MouseButton1Click:Connect(function()
+		autoAimEnabled = not autoAimEnabled
+		autoAimButton.Text = autoAimEnabled and "Auto Aim: ON" or "Auto Aim: OFF"
+	end)
+
+	espButton.MouseButton1Click:Connect(function()
+		espEnabled = not espEnabled
+		espButton.Text = espEnabled and "ESP: ON" or "ESP: OFF"
+	end)
+
+	autoShootButton.MouseButton1Click:Connect(function()
+		autoShootEnabled = not autoShootEnabled
+		autoShootButton.Text = autoShootEnabled and "Auto Shoot: ON (only for maker in Testing)" or "Auto Shoot: OFF  (only for maker in Testing)"
+	end)
+end
+
+-- Function to create Enhanced ESP
+local function createESP()
+	local function onPlayerAdded(player)
+		player.CharacterAdded:Connect(function(character)
+			-- Wait for the Head to be added to the character
+			local head = character:WaitForChild("Head")
+
+			-- Create BillboardGui for ESP
+			local espGui = Instance.new("BillboardGui")
+			espGui.Name = "ESP"
+			espGui.Adornee = head
+			espGui.Size = UDim2.new(0, 200, 0, 50)
+			espGui.StudsOffset = Vector3.new(0, 3, 0)
+			espGui.AlwaysOnTop = true
+			espGui.Parent = head
+
+			-- Create ESP Background
+			local frame = Instance.new("Frame")
+			frame.Size = UDim2.new(1, 0, 1, 0)
+			frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+			frame.BackgroundTransparency = 0.5
+			frame.Parent = espGui
+
+			-- Create ESP Name Label
+			local nameLabel = Instance.new("TextLabel")
+			nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+			nameLabel.BackgroundTransparency = 1
+			nameLabel.Text = player.Name
+			nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+			nameLabel.TextStrokeTransparency = 0.8
+			nameLabel.Parent = frame
+
+			-- Create Distance Label
+			local distanceLabel = Instance.new("TextLabel")
+			distanceLabel.Size = UDim2.new(1, 0, 0.5, 0)
+			distanceLabel.Position = UDim2.new(0, 0, 0.5, 0)
+			distanceLabel.BackgroundTransparency = 1
+			distanceLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+			distanceLabel.TextStrokeTransparency = 0.8
+			distanceLabel.Parent = frame
+
+			-- Create Health Bar
+			local healthBarBackground = Instance.new("Frame")
+			healthBarBackground.Size = UDim2.new(1, 0, 0.1, 0)
+			healthBarBackground.Position = UDim2.new(0, 0, 0.8, 0)
+			healthBarBackground.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+			healthBarBackground.Parent = espGui
+
+			local healthBar = Instance.new("Frame")
+			healthBar.Size = UDim2.new(1, 0, 1, 0)
+			healthBar.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+			healthBar.Parent = healthBarBackground
+
+			-- Update Health and Distance
+			RunService.RenderStepped:Connect(function()
+				if player.Character and player.Character:FindFirstChild("Humanoid") then
+					local humanoid = player.Character.Humanoid
+					local distance = (Camera.CFrame.Position - head.Position).magnitude
+					distanceLabel.Text = string.format("Distance: %.1f", distance)
+
+					-- Hide ESP if the distance is greater than maxESPDistance
+					espGui.Enabled = distance <= maxESPDistance
+
+					local healthRatio = humanoid.Health / humanoid.MaxHealth
+					healthBar.Size = UDim2.new(healthRatio, 0, 1, 0)
+				end
+			end)
+		end)
+	end
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer then
+			onPlayerAdded(player)
+		end
+	end
+
+	Players.PlayerAdded:Connect(onPlayerAdded)
+end
+
+-- Function to handle Auto-Aim
+local function autoAim()
+	while true do
+		if autoAimEnabled then
+			local closestPlayer = nil
+			local shortestDistance = math.huge
+
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+					local distance = (Camera.CFrame.Position - player.Character.Head.Position).magnitude
+					if distance < shortestDistance and distance < 100 then
+						shortestDistance = distance
+						closestPlayer = player
+					end
+				end
+			end
+
+			if closestPlayer then
+				Camera.CFrame = CFrame.new(Camera.CFrame.Position, closestPlayer.Character.Head.Position)
+			end
+		end
+
+		RunService.RenderStepped:Wait()
+	end
+end
+
+-- Function to handle Auto Shoot
+local function autoShoot()
+	local function isPlayerVisible(player)
+		local head = player.Character and player.Character:FindFirstChild("Head")
+		if not head then return false end
+
+		local ray = Ray.new(Camera.CFrame.Position, (head.Position - Camera.CFrame.Position).unit * 500)
+		local part, position = workspace:FindPartOnRay(ray, LocalPlayer.Character)
+		return part and part:IsDescendantOf(player.Character)
+	end
+
+	while true do
+		if autoShootEnabled then
+			local closestPlayer = nil
+			local shortestDistance = math.huge
+
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+					local distance = (Camera.CFrame.Position - player.Character.Head.Position).magnitude
+					if distance < shortestDistance and distance < 100 then
+						shortestDistance = distance
+						closestPlayer = player
+					end
+				end
+			end
+
+			if closestPlayer and isPlayerVisible(closestPlayer) then
+				local tool = LocalPlayer.Backpack:FindFirstChildOfClass("Tool")
+				if tool then
+					tool.Parent = LocalPlayer.Character
+					tool:Activate()
+				end
+			end
+		end
+
+		RunService.RenderStepped:Wait()
+	end
+end
+
+-- Infinite WalkSpeed Adjustment
+local function adjustWalkSpeed()
+	while true do
+		if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+			LocalPlayer.Character.Humanoid.WalkSpeed = defaultWalkSpeed
+		end
+		RunService.RenderStepped:Wait()
+	end
+end
+
+-- Initialization
+createUI()
+if espEnabled then
+	createESP()
+end
